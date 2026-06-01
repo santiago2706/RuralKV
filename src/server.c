@@ -94,7 +94,7 @@ void server_start(int port, HashTable* db, Wal* wal) {
     WSADATA wsaData;
     // Iniciar el subsistema de redes de Windows
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        printf("🔥 Error Critico: No se pudo encender el chip de red (WSAStartup falló).\n");
+        printf("Error Critico: No se pudo encender el chip de red (WSAStartup falló).\n");
         return;
     }
 #endif
@@ -102,7 +102,7 @@ void server_start(int port, HashTable* db, Wal* wal) {
     // Crear un canal de comunicacion vacio
     SOCKET server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket == INVALID_SOCKET) {
-        printf("🔥 Error Critico: Fallo del Socket Base.\n");
+        printf("Error Critico: Fallo del Socket Base.\n");
         return;
     }
 
@@ -113,21 +113,21 @@ void server_start(int port, HashTable* db, Wal* wal) {
 
     // Amarrar el código C al puerto de la computadora
     if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
-        printf("🔥 Error Critico: El puerto %d está siendo usado por otro programa.\n", port);
+        printf("Error Critico: El puerto %d está siendo usado por otro programa.\n", port);
         closesocket(server_socket);
         return;
     }
 
     if (listen(server_socket, 10) == SOCKET_ERROR) {
-        printf("🔥 Error Critico: No podemos 'escuchar' bloqueado por Firewall.\n");
+        printf("Error Critico: No podemos 'escuchar' bloqueado por Firewall.\n");
         closesocket(server_socket);
         return;
     }
 
     printf("\n========= RURAL KV (MODO DEMONIO) =========\n");
-    printf(" 🚀 Servidor HTTP Nativo C Encendido.\n");
-    printf(" 📡 Escuchando en el puerto TCP :: %d\n", port);
-    printf(" 🔗 En tu navegador ingresa: http://localhost:%d/\n", port);
+    printf(" Servidor HTTP Nativo C Encendido.\n");
+    printf(" Escuchando en el puerto TCP :: %d\n", port);
+    printf(" En tu navegador ingresa: http://localhost:%d/\n", port);
     printf("===========================================\n\n");
     printf("Esperando la conexión del Frontend (HTMX/Streamlit)...\n");
 
