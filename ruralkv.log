@@ -18,12 +18,3 @@ EXPIRE alda 5
 EXPIRE daniel 10
 PUT alda | 18
 EXPIRE alda 30
-PUT alda | 19
-DEL alda
-PUT alda | 19
-EXPIRE alda 20
-PUT alda | 10
-PUT alda | 20
-PUT daniel | 67
-EXPIRE daniel 32
-DEL daniel
