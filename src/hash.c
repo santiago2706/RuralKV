@@ -52,7 +52,7 @@ bool hash_put(HashTable* ht, const char* key, const char* value) {
     while (entry != NULL) {
         if (strcmp(entry->key, key) == 0) {
             // Ya existe! Actualizar valor y resetear expiración.
-            entry->value = arena_strdup(ht->arena, value);
+            entry->value =  arena_strdup(ht->arena, value);
             entry->expire_at = 0;
             return true;
         }
