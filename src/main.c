@@ -11,7 +11,7 @@
 
 int main() {
     printf("=========================================\n");
-    printf("   🔥 Iniciando RuralKV Engine\n");
+    printf("   Iniciando RuralKV Engine\n");
     printf("=========================================\n\n");
 
     printf("[Paso 1] Inicializando Arena Allocator (%d bytes)...\n", ARENA_1MB);

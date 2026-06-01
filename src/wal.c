@@ -30,6 +30,20 @@ bool wal_append_put(Wal* wal, const char* key, const char* value) {
     return true;
 }
 
+bool wal_append_del(Wal* wal, const char* key) {
+    if (!wal || !wal->file) return false;
+    fprintf(wal->file, "DEL %s\n", key);
+    fflush(wal->file);
+    return true;
+}
+
+bool wal_append_expire(Wal* wal, const char* key, int seconds) {
+    if (!wal || !wal->file) return false;
+    fprintf(wal->file, "EXPIRE %s %d\n", key, seconds);
+    fflush(wal->file);
+    return true;
+}
+
 void wal_close(Wal* wal) {
     if (wal) {
         if (wal->file) {

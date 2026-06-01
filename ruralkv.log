@@ -6,3 +6,15 @@ PUT DNI_7281 | Juan Perez - Gripe severa 39C
 PUT DNI_4455 | Maria Gomez - Parto normal. Vacuna OK
 PUT DNI_7281 | Juan Perez - Gripe severa 39C
 PUT DNI_4455 | Maria Gomez - Parto normal. Vacuna OK
+PUT dni01 | hola
+PUT ALAN_EDAD | 20
+PUT alan_1 | 20
+DEL alan_1
+PUT daniel | 18
+EXPIRE daniel 30
+PUT daniel | 19
+PUT alda | 18
+EXPIRE alda 5
+EXPIRE daniel 10
+PUT alda | 18
+EXPIRE alda 30

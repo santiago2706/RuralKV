@@ -37,7 +37,7 @@ void* arena_alloc(Arena* arena, size_t size) {
     
     // Verificamos si no hemos superado el límite impuesto (Ej: los 8MB)
     if (new_offset > arena->capacity) {
-        fprintf(stderr, "🔥 ERROR RURALKV: OOM (Out Of Memory). La Arena está llena.\n");
+        fprintf(stderr, "ERROR RURALKV: OOM (Out Of Memory). La Arena está llena.\n");
         return NULL;
     }
     
