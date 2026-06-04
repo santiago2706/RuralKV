@@ -171,63 +171,32 @@ Funciones principales:
 
 Rutas implementadas:
 
-#### `GET /`
+# Especificación de Endpoints - API RuralKV v0.1
 
-Devuelve un mensaje JSON indicando que la API esta activa.
+Este documento detalla los endpoints HTTP nativos expuestos por el servidor en C para la gestión del motor Key-Value.
 
-Respuesta aproximada:
+## Estructura de Rutas
 
-```json
-{
-  "status": "RuralKV API V0.1 Activa",
-  "uso": "Prueba con /put?k=clave&v=valor"
-}
-```
+### 1. Guardar o Actualizar Dato
+* **Ruta:** `/put`
+* **Método:** `GET` (vía URL query params)
+* **Parámetros:** * `k`: Clave única (String, decodificado por URL)
+  * `v`: Valor a almacenar (String, decodificado por URL)
+* **Descripción:** Registra de manera persistente en el archivo WAL y actualiza la caché en la memoria RAM.
 
-#### `GET /put?k=clave&v=valor`
+### 2. Obtener Dato
+* **Ruta:** `/get`
+* **Parámetros:** `k` (Clave a buscar)
+* **Respuesta exitosa:** `200 OK` con JSON `{"llave": "X", "valor": "Y"}`
 
-Guarda un par clave-valor.
+### 3. Eliminar Dato
+* **Ruta:** `/del`
+* **Parámetros:** `k` (Clave a remover)
+* **Descripción:** Elimina la entrada de la memoria RAM y registra la instrucción de borrado de forma síncrona en el WAL.
 
-Flujo interno:
-
-1. Extrae `k` y `v` desde la URL.
-2. Ejecuta `wal_append_put(wal, clave, valor)`.
-3. Ejecuta `hash_put(db, clave, valor)`.
-4. Devuelve una respuesta JSON de exito.
-
-Ejemplo:
-
-```text
-http://localhost:8080/put?k=DNI_01&v=Gripe_Alta
-```
-
-#### `GET /get?k=clave`
-
-Busca una clave en la tabla hash en memoria.
-
-Ejemplo:
-
-```text
-http://localhost:8080/get?k=DNI_01
-```
-
-Si existe:
-
-```json
-{
-  "llave": "DNI_01",
-  "valor": "Gripe_Alta"
-}
-```
-
-Si no existe:
-
-```json
-{
-  "error": "Paciente no encontrado en RAM"
-}
-```
-
+### 4. Tiempo de Vida (Evicción y TTL)
+* **Ruta:** `/expire` -> Asigna tiempo de expiración en segundos (`t`).
+* **Ruta:** `/ttl` -> Consulta los segundos restantes de una clave (`-1` si es permanente).
 Caracteristicas del servidor:
 
 - Usa CORS abierto con `Access-Control-Allow-Origin: *`.
