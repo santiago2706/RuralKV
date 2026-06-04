@@ -22,6 +22,29 @@
 // Cabeceras HTTP Universales (Habilitan CORS para que funcione en cualquier web)
 const char* HTTP_200 = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n\r\n";
 const char* HTTP_404 = "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n\r\n";
+/**
+ * @brief Decodes a percent-encoded URL string into a standard ASCII string.
+ * @details Converts '+' characters into spaces and '%HH' hex sequences into 
+ * their respective char representations. Terminal null character is appended.
+ * @param dst Pointer to the destination buffer where the decoded string will be stored.
+ * @param src Pointer to the null-terminated source string containing URL-encoded data.
+ */
+
+static void url_decode(char* dst, const char* src) {
+    while (*src) {
+        if (*src == '+') {
+            *dst++ = ' ';
+        } else if (*src == '%' && isxdigit((unsigned char)src[1]) && isxdigit((unsigned char)src[2])) {
+            char hex[3] = { src[1], src[2], '\0' };
+            *dst++ = (char)strtol(hex, NULL, 16);
+            src += 2;
+        } else {
+            *dst++ = *src;
+        }
+        src++;
+    }
+    *dst = '\0';
+} 
 
 static void handle_client(SOCKET client_socket, HashTable* db, Wal* wal) {
     char buffer[1024] = {0};
@@ -42,17 +65,21 @@ static void handle_client(SOCKET client_socket, HashTable* db, Wal* wal) {
             char* k_ptr = strstr(url, "k=");
             char* v_ptr = strstr(url, "v=");
             if (k_ptr && v_ptr) {
-                // Truco sucio en C para aislar la llave y valor de la URL
+                
                 char temp_key[100] = {0};
                 char temp_val[200] = {0};
+                char encoded_key[200] = {0};
+                char encoded_val[400] = {0}; 
                 
                 k_ptr += 2; // saltar "k="
                 v_ptr += 2; // saltar "v="
                 
                 int i=0; while(*k_ptr != '&' && *k_ptr != '\0' && i<99) { temp_key[i++] = *k_ptr++; }
                 int j=0; while(*v_ptr != ' ' && *v_ptr != '\0' && *v_ptr != '&' && j<199) { temp_val[j++] = *v_ptr++; }
-                
-                // === APLICAR EL PROTOCOLO RURAL KV ===
+                url_decode(temp_key, encoded_key);
+                url_decode(temp_val, encoded_val);
+
+                // === APLY PROTOCOLE RURAL KV ===
                 wal_append_put(wal, temp_key, temp_val); // El respaldo ROM
                 hash_put(db, temp_key, temp_val);        // La cache RAM
                 
@@ -60,15 +87,16 @@ static void handle_client(SOCKET client_socket, HashTable* db, Wal* wal) {
                 send(client_socket, response, strlen(response), 0);
             }
         } 
-        // RUTA 2: Leer un dato -> http://localhost:8080/get?k=DNI
+        
         else if (strncmp(url, "/get?", 5) == 0) {
             char* k_ptr = strstr(url, "k=");
             if (k_ptr) {
                 char temp_key[100] = {0};
+                char encoded_key[200] = {0};
                 k_ptr += 2;
                 int i=0; while(*k_ptr != ' ' && *k_ptr != '\0' && *k_ptr != '&' && i<99) { temp_key[i++] = *k_ptr++; }
-                
-                // === LLAMAR A LA BASE DE DATOS ===
+                url_decode(temp_key, encoded_key);
+                // === CALL TO THE DATA BASE ===
                 const char* val = hash_get(db, temp_key);
                 
                 if (val) {
@@ -80,7 +108,26 @@ static void handle_client(SOCKET client_socket, HashTable* db, Wal* wal) {
                 }
             }
         }
-        // RUTA 3: Bienvenida 
+
+        else if (strncmp(url, "/del?", 5) == 0) {
+            char* k_ptr = strstr(url, "k=");
+            if (k_ptr) {
+                char temp_key[200] = {0};
+                char encoded_key[200] = {0};
+                k_ptr += 2;
+                int i=0; while(*k_ptr != ' ' && *k_ptr != '\0' && *k_ptr != '&' && i<199) { encoded_key[i++] = *k_ptr++; }
+                url_decode(temp_key, encoded_key);
+
+                bool removed = hash_delete(db, temp_key);
+                if (removed) {
+                    wal_append_del(wal, temp_key);
+                    sprintf(response, "%s{\"deleted\":true, \"key\":\"%s\"}", HTTP_200, temp_key);
+                } else {
+                    sprintf(response, "%s{\"deleted\":false, \"error\":\"Clave no encontrada\"}", HTTP_404);
+                }
+                send(client_socket, response, strlen(response), 0);
+            }
+        }
         else {
              sprintf(response, "%s{\"status\":\"RuralKV API V0.1 Activa\", \"uso\": \"Prueba con /put?k=clave&v=valor\"}", HTTP_200);
              send(client_socket, response, strlen(response), 0);
@@ -89,7 +136,7 @@ static void handle_client(SOCKET client_socket, HashTable* db, Wal* wal) {
     closesocket(client_socket);
 }
 
-void server_start(int port, HashTable* db, Wal* wal) {
+void server_start(int port, HashTable* db, Wal* wal){
 #ifdef _WIN32
     WSADATA wsaData;
     // Iniciar el subsistema de redes de Windows
@@ -124,7 +171,7 @@ void server_start(int port, HashTable* db, Wal* wal) {
         return;
     }
 
-    printf("\n========= RURAL KV (MODO DEMONIO) =========\n");
+    printf("\n========= RURAL KV =========\n");
     printf(" Servidor HTTP Nativo C Encendido.\n");
     printf(" Escuchando en el puerto TCP :: %d\n", port);
     printf(" En tu navegador ingresa: http://localhost:%d/\n", port);
