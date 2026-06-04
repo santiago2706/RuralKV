@@ -1,59 +1,203 @@
-# 📘 Manual de Uso: RuralKV Engine
+# Manual de Uso: Motor RuralKV Engine
 
-Este documento documenta la capa a bajo nivel (escrita en C) del proyecto **RuralKV**. Aquí verás cómo compilar el motor sin depender del programa `make` y cómo invocar sus funciones principales si tú quisieras conectarle otra interfaz.
+Este manual explica cómo compilar, ejecutar y utilizar el motor RuralKV, además de describir las rutas HTTP disponibles y el uso del cliente CLI.
 
-## 1. Compilación Fácil (Especial para Windows)
+## 1. Requisitos
 
-Ya que nos dimos cuenta de que PowerShell no reconoce el comando Unix `make`, la forma más pura y profesional de compilar este proyecto usando directamente los binarios que genera `gcc` es la siguiente:
+- GCC compatible con C11.
+- Windows o Linux con soporte de sockets.
+- Python 3 para ejecutar el cliente `rural_cli.py`.
+- El repositorio debe tener los archivos `Makefile`, `src/*.c`, `include/*.h` y `rural_cli.py`.
 
-Abre tu terminal en tu carpeta base (`d:\DOCUMENTOS\3ER_SEMESTRE\LP1\PROYECTO_FERIA\RuralKV\RuralKV`) y pega esto:
+## 2. Compilación
+
+### 2.1 Usando `Makefile`
+
+En la raíz del proyecto, ejecute:
 
 ```bash
-gcc -Wall -Wextra -pthread -std=c11 -O2 -I./include src/*.c -o ruralkv.exe
+make
 ```
 
-Ese comando "atrapa" todos los archivos de tu carpeta `src/`, les liga las cabeceras de `include/` y genera el motor final en un ejecutable llamado `ruralkv.exe`.
+Esto genera el ejecutable `ruralkv` en Linux o `ruralkv.exe` en Windows.
 
-Para correr tu motor de prueba, usa:
+### 2.2 Compilación directa con GCC
+
+#### En Windows (PowerShell / CMD)
+
 ```bash
-.\ruralkv.exe
+gcc -Wall -Wextra -pthread -std=c11 -O2 -I./include src/*.c -o ruralkv.exe -lws2_32
 ```
 
----
+#### En Linux / macOS
 
-## 2. API C del Motor (Documentación de Funciones)
+```bash
+gcc -Wall -Wextra -pthread -std=c11 -O2 -I./include src/*.c -o ruralkv
+```
 
-Si un programador mira el código de tu C, esto es lo que tiene a su disposición como librería:
+## 3. Ejecución del servidor
 
-### A. Módulo RAM Salvavidas: `arena.h`
-Evita el `malloc()` desproporcionado. Limita el sistema para que nunca exceda los megabytes asignados.
+Una vez compilado, inicie el servidor con:
 
-*   `Arena* arena_init(size_t capacity)`: Crea la burbuja de memoria general protegida.
-    *   *Uso:* `Arena* a = arena_init(1024 * 1024); // Da 1 MB de vida util`
-*   `void* arena_alloc(Arena* arena, size_t size)`: Pide bytes desde la Arena a velocidad O(1).
-*   `void arena_free(Arena* arena)`: Regresa todo el megabyte físico devuelta al SO de Windows/Linux. (Solo usar antes del `return 0;`).
+```bash
+./ruralkv
+```
 
-### B. Módulo Búsqueda Mágica: `hash.h`
-Tabla clave-valor que encripta llaves en índices enteros usando el algoritmo `djb2`. Todo esto sacando recursos del Arena Allocator.
+o en Windows:
 
-*   `HashTable* hash_create(Arena* arena, size_t size)`: Genera el casillero.
-*   `bool hash_put(HashTable* ht, char* key, char* value)`: Guarda datos a máxima velocidad superponiéndose automáticamente encima del viejo valor si la llave ya existía.
-*   `const char* hash_get(HashTable* ht, char* key)`: Consulta base de datos (`O(1)` teóricamente).
+```bash
+ruralkv.exe
+```
 
-### C. Módulo Escudo Anti-Apagones: `wal.h`
-El Write-Ahead Log. Lo que la Memoria olvida, el Disco lo recuerda.
+El servidor arranca en el puerto `8080` y permanece escuchando en un bucle infinito.
 
-*   `Wal* wal_init(const char* filepath)`: Levanta o crea un archivo de logs que sólo permite anexar al final (`Append`).
-*   `bool wal_append_put(Wal* wal, char* key, char* value)`: Graba ininterrumpidamente al disco de estado sólido, burlando cachés con la directriz nativa `fflush()`.
-*   `void wal_close(Wal* wal)`: Bloqueo seguro de I/O sobre archivos de Windows.
+## 4. Uso del cliente CLI
 
----
+Ejecute el cliente Python desde la raíz del proyecto:
 
-## 3. Regla del Protocolo de Escritura
+```bash
+python rural_cli.py
+```
 
-Como Arquitecto de Software, cuando llegue un nuevo dato de la interfaz web, tu programa en C siempre debe acatar el **Dogma RuralKV**:
+### Comandos disponibles
 
-1.  **WAL Primero:** `wal_append_put(wal, ...)`
-    *   *El dato primero debe sobrevivir al apocalipsis eléctrico tocando disco físico.*
-2.  **RAM Después:** `hash_put(db, ...)`
-    *   *Una vez que hay supervivencia garantizada, el dato ingresa a la RAM para ser leído a velocidad luz.*
+- `PUT <llave> <valor>`: guarda o actualiza un valor.
+- `GET <llave>`: consulta el valor asociado.
+- `EXIT`: cierra el cliente.
+
+Ejemplo:
+
+```text
+rural-kv> PUT DNI_01 Gripe_Alta
+OK
+rural-kv> GET DNI_01
+"Gripe_Alta"
+```
+
+## 5. API HTTP disponible
+
+### 5.1 Guardar o actualizar
+
+- Ruta: `/put?k=<clave>&v=<valor>`
+- Método: GET
+- Ejemplo:
+
+```text
+http://localhost:8080/put?k=DNI_01&v=Gripe_Alta
+```
+
+### 5.2 Recuperar un valor
+
+- Ruta: `/get?k=<clave>`
+- Método: GET
+- Ejemplo:
+
+```text
+http://localhost:8080/get?k=DNI_01
+```
+
+### 5.3 Eliminar una clave
+
+- Ruta: `/del?k=<clave>`
+- Método: GET
+- Ejemplo:
+
+```text
+http://localhost:8080/del?k=DNI_01
+```
+
+### 5.4 Verificar existencia
+
+- Ruta: `/exists?k=<clave>`
+- Método: GET
+- Ejemplo:
+
+```text
+http://localhost:8080/exists?k=DNI_01
+```
+
+### 5.5 Listar claves activas
+
+- Ruta: `/keys`
+- Método: GET
+- Ejemplo:
+
+```text
+http://localhost:8080/keys
+```
+
+### 5.6 Asignar expiración (TTL)
+
+- Ruta: `/expire?k=<clave>&t=<segundos>`
+- Método: GET
+- Ejemplo:
+
+```text
+http://localhost:8080/expire?k=DNI_01&t=60
+```
+
+### 5.7 Consultar tiempo restante
+
+- Ruta: `/ttl?k=<clave>`
+- Método: GET
+- Ejemplo:
+
+```text
+http://localhost:8080/ttl?k=DNI_01
+```
+
+### 5.8 Comprobar que el servidor responde
+
+- Ruta: `/ping`
+- Método: GET
+- Ejemplo:
+
+```text
+http://localhost:8080/ping
+```
+
+### 5.9 Información de estado
+
+- Ruta: `/info`
+- Método: GET
+- Ejemplo:
+
+```text
+http://localhost:8080/info
+```
+
+## 6. Formato del WAL
+
+El archivo `ruralkv.log` registra operaciones en este formato:
+
+- `PUT <clave> | <valor>`
+- `DEL <clave>`
+- `EXPIRE <clave> <segundos>`
+
+El WAL se actualiza antes de que el servidor aplique la modificación en memoria.
+
+## 7. Notas importantes
+
+- El servidor no restaura automáticamente el estado desde el WAL al arrancar.
+- El servidor atiende un cliente a la vez.
+- No existe autenticación ni control de acceso.
+- El parser HTTP es minimalista; los parámetros deben enviarse en la forma exacta esperada.
+
+## 8. Desarrollo y mantenimiento
+
+### Archivos clave
+
+- `src/main.c`: inicialización de memoria, tabla hash, WAL y servidor.
+- `src/arena.c`: implementa el gestor de memoria.
+- `src/hash.c`: implementa la lógica de almacenamiento, eliminación y TTL.
+- `src/server.c`: atiende las peticiones HTTP y orquesta los endpoints.
+- `src/wal.c`: escribe el log de operaciones.
+- `include/*.h`: interfaces de los módulos.
+- `rural_cli.py`: cliente de prueba e interacción básica.
+
+### Recomendaciones para avanzar
+
+- Implementar lectura de `ruralkv.log` al iniciar el servidor.
+- Añadir pruebas unitarias para `hash.c`, `wal.c` y `server.c`.
+- Mejorar el parseo HTTP y soportar métodos `POST`.
+- Agregar documentación de casos de prueba y despliegue.
