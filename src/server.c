@@ -45,6 +45,15 @@ static void url_decode(char* dst, const char* src) {
     }
     *dst = '\0';
 } 
+/**
+ * @brief Parses incoming HTTP requests and dispatches actions to the Key-Value core.
+ * @details Intercepts synchronous raw TCP socket data, decodes parameters, and routes 
+ * them to corresponding database primitives (PUT, GET, DEL, KEYS, EXPIRE, TTL).
+ * Guarantees transactional write durability by emitting WAL logs.
+ * @param client_socket Active file descriptor connected to the remote user.
+ * @param db Pointer to the in-memory primary hash table cache.
+ * @param wal Pointer to the write-ahead logging synchronization handle.
+ */
 
 static void handle_client(SOCKET client_socket, HashTable* db, Wal* wal) {
     char buffer[1024] = {0};
@@ -128,6 +137,110 @@ static void handle_client(SOCKET client_socket, HashTable* db, Wal* wal) {
                 send(client_socket, response, strlen(response), 0);
             }
         }
+        else if (strncmp(url, "/exists?", 8) == 0) {
+            char* k_ptr = strstr(url, "k=");
+            if (k_ptr) {
+                char temp_key[200] = {0};
+                char encoded_key[200] = {0};
+                k_ptr += 2;
+                int i=0; while(*k_ptr != ' ' && *k_ptr != '\0' && *k_ptr != '&' && i<199) { encoded_key[i++] = *k_ptr++; }
+                url_decode(temp_key, encoded_key);
+
+                bool exists = hash_exists(db, temp_key);
+                sprintf(response, "%s{\"exists\":%s}", HTTP_200, exists ? "true" : "false");
+                send(client_socket, response, strlen(response), 0);
+            }
+        }
+        else if (strncmp(url, "/keys", 5) == 0) {
+            char keys_list[4096] = {0};
+            strcat(keys_list, "[");
+            int count = 0;
+            
+            for (size_t bucket = 0; bucket < db->size; bucket++) {
+                HashEntry* entry = db->buckets[bucket];
+                HashEntry* prev = NULL;
+                while (entry != NULL) {
+                    if (entry->expire_at != 0 && time(NULL) >= entry->expire_at) {
+                        if (prev) {
+                            prev->next = entry->next;
+                        } else {
+                            db->buckets[bucket] = entry->next;
+                        }
+                        entry = (prev ? prev->next : db->buckets[bucket]);
+                        continue;
+                    }
+                    if (count > 0) strcat(keys_list, ",");
+                    strcat(keys_list, "\"");
+                    strcat(keys_list, entry->key);
+                    strcat(keys_list, "\"");
+                    count++;
+                    prev = entry;
+                    entry = entry->next;
+                }
+            }
+            strcat(keys_list, "]");
+            sprintf(response, "%s{\"keys\":%s, \"count\":%d}", HTTP_200, keys_list, count);
+            send(client_socket, response, strlen(response), 0);
+        }
+        else if (strncmp(url, "/expire?", 8) == 0) {
+            char* k_ptr = strstr(url, "k=");
+            char* t_ptr = strstr(url, "t=");
+            if (k_ptr && t_ptr) {
+                char temp_key[200] = {0};
+                char encoded_key[200] = {0};
+                k_ptr += 2;
+                int i=0; while(*k_ptr != '&' && *k_ptr != '\0' && i<199) { encoded_key[i++] = *k_ptr++; }
+                url_decode(temp_key, encoded_key);
+
+                t_ptr += 2;
+                int seconds = atoi(t_ptr);
+                bool updated = hash_set_expire(db, temp_key, seconds);
+                if (updated) {
+                    wal_append_expire(wal, temp_key, seconds);
+                    sprintf(response, "%s{\"expire\":\"ok\", \"key\":\"%s\", \"seconds\":%d}", HTTP_200, temp_key, seconds);
+                } else {
+                    sprintf(response, "%s{\"error\":\"No se pudo aplicar expiración\"}", HTTP_404);
+                }
+                send(client_socket, response, strlen(response), 0);
+            }
+        }
+        else if (strncmp(url, "/ttl?", 5) == 0) {
+            char* k_ptr = strstr(url, "k=");
+            if (k_ptr) {
+                char temp_key[200] = {0};
+                char encoded_key[200] = {0};
+                k_ptr += 2;
+                int i=0; while(*k_ptr != ' ' && *k_ptr != '\0' && *k_ptr != '&' && i<199) { encoded_key[i++] = *k_ptr++; }
+                url_decode(temp_key, encoded_key);
+
+                int ttl = hash_ttl(db, temp_key);
+                if (ttl >= 0) {
+                    sprintf(response, "%s{\"ttl\":%d}", HTTP_200, ttl);
+                } else if (ttl == -1) {
+                    sprintf(response, "%s{\"ttl\":-1, \"message\":\"Sin expiración\"}", HTTP_200);
+                } else {
+                    sprintf(response, "%s{\"error\":\"Clave no encontrada\"}", HTTP_404);
+                }
+                send(client_socket, response, strlen(response), 0);
+            }
+        }
+        else if (strncmp(url, "/ping", 5) == 0) {
+            sprintf(response, "%s{\"pong\":\"PONG\"}", HTTP_200);
+            send(client_socket, response, strlen(response), 0);
+        } else if (strncmp(url, "/info", 5) == 0) {
+            int count = 0;
+            for (size_t bucket = 0; bucket < db->size; bucket++) {
+                HashEntry* entry = db->buckets[bucket];
+                while (entry != NULL) {
+                    if (entry->expire_at == 0 || time(NULL) < entry->expire_at) {
+                        count++;
+                    }
+                    entry = entry->next;
+                }
+            }
+            sprintf(response, "%s{\"status\":\"ok\", \"version\":\"0.1\", \"keys\":%d}", HTTP_200, count);
+            send(client_socket, response, strlen(response), 0);
+        }
         else {
              sprintf(response, "%s{\"status\":\"RuralKV API V0.1 Activa\", \"uso\": \"Prueba con /put?k=clave&v=valor\"}", HTTP_200);
              send(client_socket, response, strlen(response), 0);
@@ -135,6 +248,7 @@ static void handle_client(SOCKET client_socket, HashTable* db, Wal* wal) {
     }
     closesocket(client_socket);
 }
+
 
 void server_start(int port, HashTable* db, Wal* wal){
 #ifdef _WIN32
