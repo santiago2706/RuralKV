@@ -1,29 +1,45 @@
+/**
+ * @file arena.h
+ * @brief Arena Allocator for bounded memory management.
+ * @note Prevents memory fragmentation and ensures O(1) allocation time.
+ */
 #ifndef RURAL_ARENA_H
 #define RURAL_ARENA_H
 
 #include <stddef.h>
 #include <stdint.h>
 
-/* 
- * Arena Allocator
- * El secreto de RuralKV para usar menos de 8MB de RAM sin fragmentarse.
- */
 typedef struct {
     uint8_t* buffer;  // Puntero al bloque gigante de memoria
     size_t capacity;  // Tamaño máximo en bytes
     size_t offset;    // Cuánta memoria hemos usado hasta ahora
 } Arena;
 
-// Inicializa la arena con un tamaño en bytes (Ej: 1024 * 1024 para 1MB)
+/**
+ * @brief Initializes a new memory arena with a fixed capacity.
+ * @param capacity The total size in bytes to allocate from the OS.
+ * @return Pointer to the allocated Arena, or NULL if the OS allocation fails.
+ */
 Arena* arena_init(size_t capacity);
 
-// Solicita memoria a la arena. Equivalente a un malloc() pero instantáneo y seguro O(1)
+/**
+ * @brief Allocates a block of memory from the arena.
+ * @param arena Pointer to the memory arena.
+ * @param size Requested size in bytes.
+ * @return Aligned pointer to the allocated space, or NULL if capacity is exceeded.
+ */
 void* arena_alloc(Arena* arena, size_t size);
 
-// Libera formalmente toda la arena (Solo se llama al apagar el servidor)
+/**
+ * @brief Resets the arena offset to zero without freeing the physical block.
+ * @note Useful for clearing temporary data between execution cycles.
+ */
 void arena_free(Arena* arena);
 
-// Reinicia el offset a 0 (Limpieza instantánea sin liberar memoria real al S.O.)
+/**
+ * @brief Releases the entire arena block back to the Operating System.
+ * @param arena Pointer to the memory arena.
+ */
 void arena_reset(Arena* arena);
 
 #endif // RURAL_ARENA_H
