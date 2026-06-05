@@ -1,3 +1,7 @@
+/**
+ * @file wal.c
+ * @brief Write-Ahead Logging (WAL) implementation for atomicity and durability.
+ */
 #include "wal.h"
 #include <stdlib.h>
 #include <string.h>
@@ -6,8 +10,8 @@ Wal* wal_init(const char* filepath) {
     Wal* wal = (Wal*)malloc(sizeof(Wal));
     if (!wal) return NULL;
     
-    // "ab+" = Append Binary. Crea el archivo si no existe, y el cabezal
-    // del disco SIEMPRE escribe al final (extremadamente rápido).
+    /* "ab+" = Append Binary mode. Creates the file if it does not exist.
+       Ensures disk writes always occur at the end of the file (O(1) sequential I/O). */
     wal->file = fopen(filepath, "ab+");
     if (!wal->file) {
         free(wal);
@@ -20,12 +24,12 @@ Wal* wal_init(const char* filepath) {
 bool wal_append_put(Wal* wal, const char* key, const char* value) {
     if (!wal || !wal->file) return false;
     
-    // Formato texto seguro para sobrevivir apagones.
-    // (En un motor más complejo podríamos usar binario puro + crc32)
+    /* Plain-text log format for crash-resiliency. 
+       Format: PUT <key> | <value> */
     fprintf(wal->file, "PUT %s | %s\n", key, value);
     
-    // fflush() EXIGE al Sistema Operativo que grabe estritamente en el disco 
-    // en este exacto nanosegundo, ignorando sus cachés internos.
+    /* Forces the operating system to flush user-space buffers directly 
+       to persistent storage media. */
     fflush(wal->file);
     return true;
 }
@@ -33,7 +37,8 @@ bool wal_append_put(Wal* wal, const char* key, const char* value) {
 bool wal_append_del(Wal* wal, const char* key) {
     if (!wal || !wal->file) return false;
     fprintf(wal->file, "DEL %s\n", key);
-    //Guarda inmediatamente en el disco la key del valor a eliminar
+    /* Log format for structural deletion.
+       Format: DEL <key> */
     fflush(wal->file);
     return true;
 } 
@@ -41,7 +46,8 @@ bool wal_append_del(Wal* wal, const char* key) {
 bool wal_append_expire(Wal* wal, const char* key, int seconds) {
     if (!wal || !wal->file) return false;
     fprintf(wal->file, "EXPIRE %s %d\n", key, seconds);
-    //Guarda el key y el time de expiración en el disco inmediatamente
+    /* Log format for Time-To-Live (TTL) eviction mapping.
+       Format: EXPIRE <key> <seconds> */
     fflush(wal->file);
     return true;
 }
