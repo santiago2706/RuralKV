@@ -110,12 +110,22 @@ Rutas actualmente soportadas:
 
 - Archivo: `rural_cli.py`
 
-Proporciona un acceso de consola estilo Redis para pruebas manuales.
+Proporciona un acceso de consola estilo Redis para pruebas manuales contra el servidor HTTP local.
 
 Comandos soportados:
 
 - `PUT <llave> <valor>`
 - `GET <llave>`
+- `DEL <llave>`
+- `EXISTS <llave>`
+- `KEYS`
+- `EXPIRE <llave> <segundos>`
+- `TTL <llave>`
+- `PING`
+- `INFO`
+- `CLEAR`
+- `HELP`
+- `MEM`
 - `EXIT`
 
 ## 5. Flujo de datos
@@ -247,7 +257,10 @@ http://localhost:8080/info
 5. Se añadió el `WAL` para asegurar durabilidad de escritura.
 6. Se creó el servidor HTTP y se definieron los endpoints de prueba.
 7. Se construyó el cliente CLI para validar flujo de uso.
-8. Se dejó documentado el estado actual, las posibles mejoras y los riesgos de exposición.
+8. Se amplió el cliente CLI con comandos de administración y diagnóstico: `DEL`, `EXISTS`, `KEYS`, `EXPIRE`, `TTL`, `PING`, `INFO`, `CLEAR`, `HELP` y `MEM`.
+9. Se creó un entorno virtual local `.venv/` para aislar dependencias de Python durante el desarrollo.
+10. Se actualizó `.gitignore` para excluir `.venv/` y artefactos generados como ejecutables, objetos y logs.
+11. Se dejó documentado el estado actual, las posibles mejoras y los riesgos de exposición.
 
 ## 9. Recomendaciones técnicas
 
@@ -258,6 +271,7 @@ http://localhost:8080/info
 
 ## 10. Estructura de archivos relevante
 
+- `.gitignore`
 - `src/main.c`
 - `src/arena.c`
 - `src/hash.c`
@@ -268,9 +282,16 @@ http://localhost:8080/info
 - `include/server.h`
 - `include/wal.h`
 - `rural_cli.py`
+- `requirements.txt`
 - `Makefile`
 - `docs/MANUAL.md`
 - `docs/DOCUMENTACION_SISTEMA.md`
+
+### Entorno de desarrollo Python
+
+El entorno virtual `.venv/` se usa solo de forma local para ejecutar herramientas y dependencias de Python, por ejemplo el cliente `rural_cli.py`. No forma parte del código fuente versionado y queda excluido mediante `.gitignore`.
+
+La lista de dependencias compartibles del proyecto debe mantenerse en `requirements.txt`.
 
 ### Red
 
