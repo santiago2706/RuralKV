@@ -26,7 +26,7 @@ Esto genera el ejecutable `ruralkv` en Linux o `ruralkv.exe` en Windows.
 #### En Windows (PowerShell / CMD)
 
 ```bash
-gcc -Wall -Wextra -pthread -std=c11 -O2 -I./include src/*.c -o ruralkv.exe -lws2_32
+gcc -Wall -Wextra -pthread -std=c11 -O2 -I./include src/arena.c src/hash.c src/main.c src/server.c src/wal.c -o ruralkv.exe -lws2_32
 ```
 
 #### En Linux / macOS
