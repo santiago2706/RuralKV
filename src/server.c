@@ -83,8 +83,8 @@ static void handle_client(SOCKET client_socket, HashTable* db, Wal* wal) {
                 k_ptr += 2; // saltar "k="
                 v_ptr += 2; // saltar "v="
                 
-                int i=0; while(*k_ptr != '&' && *k_ptr != '\0' && i<99) { temp_key[i++] = *k_ptr++; }
-                int j=0; while(*v_ptr != ' ' && *v_ptr != '\0' && *v_ptr != '&' && j<199) { temp_val[j++] = *v_ptr++; }
+                int i=0; while(*k_ptr != '&' && *k_ptr != '\0' && i<99) { encoded_key[i++] = *k_ptr++; }
+                int j=0; while(*v_ptr != ' ' && *v_ptr != '\0' && *v_ptr != '&' && j<199) { encoded_val[j++] = *v_ptr++; }
                 url_decode(temp_key, encoded_key);
                 url_decode(temp_val, encoded_val);
 
@@ -103,7 +103,7 @@ static void handle_client(SOCKET client_socket, HashTable* db, Wal* wal) {
                 char temp_key[100] = {0};
                 char encoded_key[200] = {0};
                 k_ptr += 2;
-                int i=0; while(*k_ptr != ' ' && *k_ptr != '\0' && *k_ptr != '&' && i<99) { temp_key[i++] = *k_ptr++; }
+                int i=0; while(*k_ptr != ' ' && *k_ptr != '\0' && *k_ptr != '&' && i<99) { encoded_key[i++] = *k_ptr++; }
                 url_decode(temp_key, encoded_key);
                 // === CALL TO THE DATA BASE ===
                 const char* val = hash_get(db, temp_key);
