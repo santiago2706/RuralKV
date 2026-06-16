@@ -6,10 +6,10 @@
 
 ---
 #Autores 
-Luis Angel Santiago Ayala
-Alan Josue Monje MAron
-Daniel Efren Puertas FLores
-Aldair Samir Piñas Camarena
+* **Luis Angel Santiago Ayala
+* **Alan Josue Monje MAron
+* **Daniel Efren Puertas FLores
+* **Aldair Samir Piñas Camarena
 ## 1 La Problemática
 
 En las postas médicas y centros comunales de las zonas rurales del Perú, la gestión de datos vitales (historias clínicas, vacunas, registro de nacimientos, alertas epidemiológicas) se enfrenta a una realidad tecnológica hostil:
