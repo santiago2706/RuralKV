@@ -26,7 +26,7 @@ Esto genera el ejecutable `ruralkv` en Linux o `ruralkv.exe` en Windows.
 #### En Windows (PowerShell / CMD)
 
 ```bash
-gcc -Wall -Wextra -pthread -std=c11 -O2 -I./include src/arena.c src/hash.c src/main.c src/server.c src/wal.c -o ruralkv.exe -lws2_32
+gcc -Wall -Wextra -pthread -std=c11 -O2 -I./include src/arena.c src/hash.c src/main.c src/server.c src/snapshot.c src/wal.c -o ruralkv.exe -lws2_32
 ```
 
 #### En Linux / macOS
@@ -50,7 +50,7 @@ ruralkv.exe
 ```
 
 El servidor arranca en el puerto `8080` y permanece escuchando en un bucle infinito.
-Antes de aceptar conexiones, reconstruye la tabla hash desde `ruralkv.log` mediante replay del WAL.
+Antes de aceptar conexiones, carga `snapshot.bin` y luego reconstruye la tabla hash desde `ruralkv.log` mediante replay del WAL.
 
 ## 4. Uso del cliente CLI
 
@@ -157,7 +157,17 @@ http://localhost:8080/ttl?k=DNI_01
 http://localhost:8080/ping
 ```
 
-### 5.9 Informacion de estado
+### 5.9 Generar snapshot manual
+
+- Ruta: `/snapshot`
+- Metodo: GET
+- Ejemplo:
+
+```text
+http://localhost:8080/snapshot
+```
+
+### 5.10 Informacion de estado
 
 - Ruta: `/info`
 - Metodo: GET
@@ -175,11 +185,20 @@ El archivo `ruralkv.log` registra operaciones en este formato:
 - `DEL <clave>`
 - `EXPIRE <clave> <segundos>`
 
-El WAL se actualiza antes de que el servidor aplique la modificacion en memoria. Durante el arranque, el servidor reinterpreta ese registro y restaura la HashTable.
+El WAL se actualiza antes de que el servidor aplique la modificacion en memoria. Durante el arranque, el servidor carga primero `snapshot.bin` y luego reinterpreta el WAL para restaurar la HashTable con menos trabajo.
+
+El archivo `snapshot.bin` guarda:
+
+- total de entradas,
+- longitud de la clave,
+- clave,
+- longitud del valor,
+- valor,
+- `expire_at`.
 
 ## 7. Notas importantes
 
-- El servidor restaura automaticamente el estado desde `ruralkv.log` al arrancar.
+- El servidor restaura automaticamente el estado desde `snapshot.bin` y `ruralkv.log` al arrancar.
 - El servidor atiende un cliente a la vez.
 - No existe autenticacion ni control de acceso.
 - El parser HTTP es minimalista; los parametros deben enviarse en la forma exacta esperada.
@@ -188,16 +207,17 @@ El WAL se actualiza antes de que el servidor aplique la modificacion en memoria.
 
 ### Archivos clave
 
-- `src/main.c`: inicializacion de memoria, tabla hash, WAL y servidor.
+- `src/main.c`: inicializacion de memoria, tabla hash, snapshot, WAL y servidor.
 - `src/arena.c`: implementa el gestor de memoria.
 - `src/hash.c`: implementa la logica de almacenamiento, eliminacion y TTL.
 - `src/server.c`: atiende las peticiones HTTP y orquesta los endpoints.
+- `src/snapshot.c`: guarda y carga snapshots binarios.
 - `src/wal.c`: escribe el log de operaciones y recupera el estado al iniciar.
 - `include/*.h`: interfaces de los modulos.
 - `rural_cli.py`: cliente de prueba e interaccion basica.
 
 ### Recomendaciones para avanzar
 
-- Añadir pruebas unitarias para `hash.c`, `wal.c` y `server.c`.
+- Añadir pruebas unitarias para `hash.c`, `wal.c`, `server.c` y `snapshot.c`.
 - Mejorar el parseo HTTP y soportar metodos `POST`.
 - Agregar documentacion de casos de prueba y despliegue.

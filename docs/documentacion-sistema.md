@@ -10,6 +10,7 @@ RuralKV es un motor de almacenamiento clave-valor escrito en C, concebido para o
 
 - almacenamiento en memoria de pares `clave -> valor`,
 - persistencia mediante un Write-Ahead Log (WAL),
+- snapshots binarios para acelerar la recuperacion,
 - servidor HTTP nativo con rutas basicas,
 - gestion de TTL por clave,
 - un cliente CLI en Python para pruebas funcionales.
@@ -23,7 +24,8 @@ El proyecto esta pensado como la base tecnica de una solucion tipo ImmortalData 
 - `HashTable` en memoria con colisiones por encadenamiento.
 - `Arena Allocator` para asignaciones rapidas y predecibles.
 - Registro append-only de operaciones (`ruralkv.log`).
-- Recuperacion automatica del estado al iniciar mediante replay del WAL.
+- Snapshots binarios manuales o temporales (`snapshot.bin`).
+- Recuperacion automatica del estado al iniciar mediante snapshot + replay del WAL.
 - Endpoints HTTP para CRUD basico y TTL.
 - Cliente Python interactivo (`rural_cli.py`).
 - Compilacion multiplataforma con `Makefile`.
@@ -89,7 +91,23 @@ Cada insercion se sincroniza con `fflush()` para mayor durabilidad.
 
 Al iniciar el servidor, `wal_replay()` reabre `ruralkv.log`, reconstruye la `HashTable` y reporta cuantas operaciones fueron recuperadas.
 
-### 4.4 Servidor HTTP nativo
+### 4.4 Snapshot binario
+
+- Archivo: `src/snapshot.c`
+- Interfaz: `include/snapshot.h`
+
+El snapshot guarda una copia completa del estado activo de la `HashTable` en `snapshot.bin` para acelerar el arranque. El formato binario incluye:
+
+- total de entradas,
+- longitud de clave,
+- bytes de clave,
+- longitud de valor,
+- bytes de valor,
+- `expire_at`.
+
+Al cargar, `snapshot_load()` reconstruye las entradas activas y descarta las que ya expiraron.
+
+### 4.5 Servidor HTTP nativo
 
 - Archivo: `src/server.c`
 - Interfaz: `include/server.h`
@@ -106,9 +124,10 @@ Rutas actualmente soportadas:
 - `/expire?k=<clave>&t=<segundos>`
 - `/ttl?k=<clave>`
 - `/ping`
+- `/snapshot`
 - `/info`
 
-### 4.5 Cliente CLI en Python
+### 4.6 Cliente CLI en Python
 
 - Archivo: `rural_cli.py`
 
@@ -133,12 +152,13 @@ Comandos soportados:
 ## 5. Flujo de datos
 
 1. `main.c` inicializa el `Arena`, la `HashTable` y el `WAL`.
-2. `wal_replay()` reconstruye el estado en memoria desde `ruralkv.log`.
-3. El servidor inicia en puerto `8080`.
-4. Cada peticion entrante se parsea de forma simplificada en `server.c`.
-5. En `/put`, la operacion se escribe en WAL y luego en la tabla hash.
-6. En `/get`, se consulta la tabla hash y se devuelve el valor activo.
-7. En `/expire`, se configura TTL y se elimina la entrada cuando expira.
+2. `snapshot_load()` reconstruye primero el estado desde `snapshot.bin`.
+3. `wal_replay()` aplica luego las operaciones mas recientes desde `ruralkv.log`.
+4. El servidor inicia en puerto `8080`.
+5. Cada peticion entrante se parsea de forma simplificada en `server.c`.
+6. En `/put`, la operacion se escribe en WAL y luego en la tabla hash.
+7. En `/get`, se consulta la tabla hash y se devuelve el valor activo.
+8. En `/expire`, se configura TTL y se elimina la entrada cuando expira.
 
 ## 6. Endpoints y ejemplos
 
@@ -222,7 +242,17 @@ Ejemplo:
 http://localhost:8080/ping
 ```
 
-### 6.9 Informacion del motor
+### 6.9 Generar snapshot manual
+
+`GET /snapshot`
+
+Ejemplo:
+
+```text
+http://localhost:8080/snapshot
+```
+
+### 6.10 Informacion del motor
 
 `GET /info`
 
@@ -238,7 +268,8 @@ http://localhost:8080/info
 
 - Almacenamiento en memoria clave-valor.
 - Persistencia append-only en `ruralkv.log`.
-- Recuperacion automatica del estado al iniciar mediante WAL replay.
+- Persistencia por snapshot binario en `snapshot.bin`.
+- Recuperacion automatica del estado al iniciar mediante snapshot + WAL replay.
 - Endpoints HTTP CRUD basicos.
 - Cliente CLI Python.
 - Soporte de TTL y vencimiento de entradas.
@@ -279,10 +310,12 @@ http://localhost:8080/info
 - `src/arena.c`
 - `src/hash.c`
 - `src/server.c`
+- `src/snapshot.c`
 - `src/wal.c`
 - `include/arena.h`
 - `include/hash.h`
 - `include/server.h`
+- `include/snapshot.h`
 - `include/wal.h`
 - `rural_cli.py`
 - `requirements.txt`
@@ -309,7 +342,7 @@ Esto es suficiente para una demostracion simple, pero no para alta concurrencia 
 
 ### Persistencia
 
-El WAL registra operaciones y el servidor las reinterpreta al iniciar para reconstruir la tabla hash en memoria. Esto deja el historial en disco y el estado activo disponible tras reiniciar.
+El WAL registra operaciones y el servidor las reinterpreta al iniciar para reconstruir la tabla hash en memoria. Ademas, el snapshot permite restaurar una copia compacta del estado antes de aplicar el WAL, reduciendo el tiempo de arranque.
 
 ## 11. Posibles mejoras futuras
 
@@ -322,13 +355,13 @@ Mejoras recomendadas para completar el sistema:
 - Agregar endpoint `LIST` o iterador de claves.
 - Agregar locks o modelo multihilo si se atienden clientes concurrentes.
 - Separar parser HTTP de la logica de base de datos.
-- Agregar pruebas unitarias para Arena, Hash y WAL.
+- Agregar pruebas unitarias para Arena, Hash, WAL y Snapshot.
 - Agregar pruebas de integracion para la API HTTP.
 - Definir un formato WAL mas robusto con longitud de campos o checksum.
 - Implementar autenticacion si se usa con datos sensibles.
 
 ## 12. Resumen
 
-RuralKV ya tiene el nucleo minimo de una base clave-valor local: reserva memoria con Arena, indexa datos con una tabla hash, registra escrituras en un WAL, recupera el estado al arrancar y expone operaciones basicas mediante HTTP y CLI.
+RuralKV ya tiene el nucleo minimo de una base clave-valor local: reserva memoria con Arena, indexa datos con una tabla hash, registra escrituras en un WAL, guarda snapshots compactos, recupera el estado al arrancar y expone operaciones basicas mediante HTTP y CLI.
 
 El sistema es ideal como prototipo educativo o base inicial para una solucion offline-first. Para convertirlo en un motor resistente en produccion, el siguiente paso importante es mejorar el parser de entrada, agregar controles de seguridad y ampliar las pruebas automatizadas.
