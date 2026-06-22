@@ -6,6 +6,6 @@
 #include "wal.h"
 
 // Función bloqueante: Abre el puerto TCP, parsea HTTP básico y responde.
-void server_start(int port, HashTable* db, Wal* wal);
+void server_start(int port, HashTable* db, WAL* wal);
 
 #endif

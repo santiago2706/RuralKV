@@ -1,4 +1,5 @@
 #include "server.h"
+#include "snapshot.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -227,6 +228,14 @@ static void handle_client(SOCKET client_socket, HashTable* db, WAL* wal) {
         }
         else if (strncmp(url, "/ping", 5) == 0) {
             sprintf(response, "%s{\"pong\":\"PONG\"}", HTTP_200);
+            send(client_socket, response, strlen(response), 0);
+        } else if (strncmp(url, "/snapshot", 9) == 0) {
+            int saved = snapshot_save(db, "snapshot.bin");
+            if (saved >= 0) {
+                sprintf(response, "%s{\"snapshot\":\"ok\", \"saved\":%d}", HTTP_200, saved);
+            } else {
+                sprintf(response, "%s{\"snapshot\":\"error\"}", HTTP_404);
+            }
             send(client_socket, response, strlen(response), 0);
         } else if (strncmp(url, "/info", 5) == 0) {
             int count = 0;
