@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include "arena.h"
 #include "hash.h"
+#include "snapshot.h"
 #include "wal.h"
 #include "server.h"
 
@@ -20,9 +21,23 @@ int main() {
     
     printf("[Paso 2] Levantando Tabla Hash O(1)...\n");
     HashTable* db = hash_create(arena, CANTIDAD_CASILLAS_HASH);
+    if (!db) {
+        arena_free(arena);
+        return 1;
+    }
     
-    printf("[Paso 3] Abriendo Write-Ahead Log de Seguridad...\n");
-    Wal* wal = wal_init("ruralkv.log");
+    printf("[Paso 3] Cargando snapshot persistente...\n");
+    snapshot_load(db, "snapshot.bin");
+
+    printf("[Paso 4] Abriendo Write-Ahead Log de Seguridad...\n");
+    WAL* wal = wal_init("ruralkv.log");
+    if (!wal) {
+        arena_free(arena);
+        return 1;
+    }
+
+    printf("[Paso 5] Recuperando estado desde WAL...\n");
+    wal_replay(wal, db);
     
     // Aquí el programa bloquea el main thread y entra en un bucle infinito
     server_start(PORT, db, wal);

@@ -1,6 +1,6 @@
 # Manual de Uso: Motor RuralKV Engine
 
-Este manual explica cómo compilar, ejecutar y utilizar el motor RuralKV, además de describir las rutas HTTP disponibles y el uso del cliente CLI.
+Este manual explica como compilar, ejecutar y utilizar el motor RuralKV, ademas de describir las rutas HTTP disponibles y el uso del cliente CLI.
 
 ## 1. Requisitos
 
@@ -9,11 +9,11 @@ Este manual explica cómo compilar, ejecutar y utilizar el motor RuralKV, ademá
 - Python 3 para ejecutar el cliente `rural_cli.py`.
 - El repositorio debe tener los archivos `Makefile`, `src/*.c`, `include/*.h` y `rural_cli.py`.
 
-## 2. Compilación
+## 2. Compilacion
 
 ### 2.1 Usando `Makefile`
 
-En la raíz del proyecto, ejecute:
+En la raiz del proyecto, ejecute:
 
 ```bash
 make
@@ -21,12 +21,12 @@ make
 
 Esto genera el ejecutable `ruralkv` en Linux o `ruralkv.exe` en Windows.
 
-### 2.2 Compilación directa con GCC
+### 2.2 Compilacion directa con GCC
 
 #### En Windows (PowerShell / CMD)
 
 ```bash
-gcc -Wall -Wextra -pthread -std=c11 -O2 -I./include src/arena.c src/hash.c src/main.c src/server.c src/wal.c -o ruralkv.exe -lws2_32
+gcc -Wall -Wextra -pthread -std=c11 -O2 -I./include src/arena.c src/hash.c src/main.c src/server.c src/snapshot.c src/wal.c -o ruralkv.exe -lws2_32
 ```
 
 #### En Linux / macOS
@@ -35,7 +35,7 @@ gcc -Wall -Wextra -pthread -std=c11 -O2 -I./include src/arena.c src/hash.c src/m
 gcc -Wall -Wextra -pthread -std=c11 -O2 -I./include src/*.c -o ruralkv
 ```
 
-## 3. Ejecución del servidor
+## 3. Ejecucion del servidor
 
 Una vez compilado, inicie el servidor con:
 
@@ -50,10 +50,11 @@ ruralkv.exe
 ```
 
 El servidor arranca en el puerto `8080` y permanece escuchando en un bucle infinito.
+Antes de aceptar conexiones, carga `snapshot.bin` y luego reconstruye la tabla hash desde `ruralkv.log` mediante replay del WAL.
 
 ## 4. Uso del cliente CLI
 
-Ejecute el cliente Python desde la raíz del proyecto:
+Ejecute el cliente Python desde la raiz del proyecto:
 
 ```bash
 python rural_cli.py
@@ -79,7 +80,7 @@ rural-kv> GET DNI_01
 ### 5.1 Guardar o actualizar
 
 - Ruta: `/put?k=<clave>&v=<valor>`
-- Método: GET
+- Metodo: GET
 - Ejemplo:
 
 ```text
@@ -89,7 +90,7 @@ http://localhost:8080/put?k=DNI_01&v=Gripe_Alta
 ### 5.2 Recuperar un valor
 
 - Ruta: `/get?k=<clave>`
-- Método: GET
+- Metodo: GET
 - Ejemplo:
 
 ```text
@@ -99,7 +100,7 @@ http://localhost:8080/get?k=DNI_01
 ### 5.3 Eliminar una clave
 
 - Ruta: `/del?k=<clave>`
-- Método: GET
+- Metodo: GET
 - Ejemplo:
 
 ```text
@@ -109,7 +110,7 @@ http://localhost:8080/del?k=DNI_01
 ### 5.4 Verificar existencia
 
 - Ruta: `/exists?k=<clave>`
-- Método: GET
+- Metodo: GET
 - Ejemplo:
 
 ```text
@@ -119,17 +120,17 @@ http://localhost:8080/exists?k=DNI_01
 ### 5.5 Listar claves activas
 
 - Ruta: `/keys`
-- Método: GET
+- Metodo: GET
 - Ejemplo:
 
 ```text
 http://localhost:8080/keys
 ```
 
-### 5.6 Asignar expiración (TTL)
+### 5.6 Asignar expiracion (TTL)
 
 - Ruta: `/expire?k=<clave>&t=<segundos>`
-- Método: GET
+- Metodo: GET
 - Ejemplo:
 
 ```text
@@ -139,7 +140,7 @@ http://localhost:8080/expire?k=DNI_01&t=60
 ### 5.7 Consultar tiempo restante
 
 - Ruta: `/ttl?k=<clave>`
-- Método: GET
+- Metodo: GET
 - Ejemplo:
 
 ```text
@@ -149,17 +150,27 @@ http://localhost:8080/ttl?k=DNI_01
 ### 5.8 Comprobar que el servidor responde
 
 - Ruta: `/ping`
-- Método: GET
+- Metodo: GET
 - Ejemplo:
 
 ```text
 http://localhost:8080/ping
 ```
 
-### 5.9 Información de estado
+### 5.9 Generar snapshot manual
+
+- Ruta: `/snapshot`
+- Metodo: GET
+- Ejemplo:
+
+```text
+http://localhost:8080/snapshot
+```
+
+### 5.10 Informacion de estado
 
 - Ruta: `/info`
-- Método: GET
+- Metodo: GET
 - Ejemplo:
 
 ```text
@@ -174,30 +185,39 @@ El archivo `ruralkv.log` registra operaciones en este formato:
 - `DEL <clave>`
 - `EXPIRE <clave> <segundos>`
 
-El WAL se actualiza antes de que el servidor aplique la modificación en memoria.
+El WAL se actualiza antes de que el servidor aplique la modificacion en memoria. Durante el arranque, el servidor carga primero `snapshot.bin` y luego reinterpreta el WAL para restaurar la HashTable con menos trabajo.
+
+El archivo `snapshot.bin` guarda:
+
+- total de entradas,
+- longitud de la clave,
+- clave,
+- longitud del valor,
+- valor,
+- `expire_at`.
 
 ## 7. Notas importantes
 
-- El servidor no restaura automáticamente el estado desde el WAL al arrancar.
+- El servidor restaura automaticamente el estado desde `snapshot.bin` y `ruralkv.log` al arrancar.
 - El servidor atiende un cliente a la vez.
-- No existe autenticación ni control de acceso.
-- El parser HTTP es minimalista; los parámetros deben enviarse en la forma exacta esperada.
+- No existe autenticacion ni control de acceso.
+- El parser HTTP es minimalista; los parametros deben enviarse en la forma exacta esperada.
 
 ## 8. Desarrollo y mantenimiento
 
 ### Archivos clave
 
-- `src/main.c`: inicialización de memoria, tabla hash, WAL y servidor.
+- `src/main.c`: inicializacion de memoria, tabla hash, snapshot, WAL y servidor.
 - `src/arena.c`: implementa el gestor de memoria.
-- `src/hash.c`: implementa la lógica de almacenamiento, eliminación y TTL.
+- `src/hash.c`: implementa la logica de almacenamiento, eliminacion y TTL.
 - `src/server.c`: atiende las peticiones HTTP y orquesta los endpoints.
-- `src/wal.c`: escribe el log de operaciones.
-- `include/*.h`: interfaces de los módulos.
-- `rural_cli.py`: cliente de prueba e interacción básica.
+- `src/snapshot.c`: guarda y carga snapshots binarios.
+- `src/wal.c`: escribe el log de operaciones y recupera el estado al iniciar.
+- `include/*.h`: interfaces de los modulos.
+- `rural_cli.py`: cliente de prueba e interaccion basica.
 
 ### Recomendaciones para avanzar
 
-- Implementar lectura de `ruralkv.log` al iniciar el servidor.
-- Añadir pruebas unitarias para `hash.c`, `wal.c` y `server.c`.
-- Mejorar el parseo HTTP y soportar métodos `POST`.
-- Agregar documentación de casos de prueba y despliegue.
+- Añadir pruebas unitarias para `hash.c`, `wal.c`, `server.c` y `snapshot.c`.
+- Mejorar el parseo HTTP y soportar metodos `POST`.
+- Agregar documentacion de casos de prueba y despliegue.

@@ -1,4 +1,6 @@
 #include "server.h"
+#include "snapshot.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,7 +57,7 @@ static void url_decode(char* dst, const char* src) {
  * @param wal Pointer to the write-ahead logging synchronization handle.
  */
 
-static void handle_client(SOCKET client_socket, HashTable* db, Wal* wal) {
+static void handle_client(SOCKET client_socket, HashTable* db, WAL* wal) {
     char buffer[1024] = {0};
     int bytes_read = recv(client_socket, buffer, sizeof(buffer)-1, 0);
     
@@ -227,6 +229,14 @@ static void handle_client(SOCKET client_socket, HashTable* db, Wal* wal) {
         else if (strncmp(url, "/ping", 5) == 0) {
             sprintf(response, "%s{\"pong\":\"PONG\"}", HTTP_200);
             send(client_socket, response, strlen(response), 0);
+        } else if (strncmp(url, "/snapshot", 9) == 0) {
+            int saved = snapshot_save(db, "snapshot.bin");
+            if (saved >= 0) {
+                sprintf(response, "%s{\"snapshot\":\"ok\", \"saved\":%d}", HTTP_200, saved);
+            } else {
+                sprintf(response, "%s{\"snapshot\":\"error\"}", HTTP_404);
+            }
+            send(client_socket, response, strlen(response), 0);
         } else if (strncmp(url, "/info", 5) == 0) {
             int count = 0;
             for (size_t bucket = 0; bucket < db->size; bucket++) {
@@ -250,7 +260,7 @@ static void handle_client(SOCKET client_socket, HashTable* db, Wal* wal) {
 }
 
 
-void server_start(int port, HashTable* db, Wal* wal){
+void server_start(int port, HashTable* db, WAL* wal){
 #ifdef _WIN32
     WSADATA wsaData;
     // Iniciar el subsistema de redes de Windows
