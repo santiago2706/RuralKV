@@ -20,9 +20,20 @@ int main() {
     
     printf("[Paso 2] Levantando Tabla Hash O(1)...\n");
     HashTable* db = hash_create(arena, CANTIDAD_CASILLAS_HASH);
+    if (!db) {
+        arena_free(arena);
+        return 1;
+    }
     
     printf("[Paso 3] Abriendo Write-Ahead Log de Seguridad...\n");
-    Wal* wal = wal_init("ruralkv.log");
+    WAL* wal = wal_init("ruralkv.log");
+    if (!wal) {
+        arena_free(arena);
+        return 1;
+    }
+
+    printf("[Paso 4] Recuperando estado desde WAL...\n");
+    wal_replay(wal, db);
     
     // Aquí el programa bloquea el main thread y entra en un bucle infinito
     server_start(PORT, db, wal);

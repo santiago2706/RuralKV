@@ -1,23 +1,23 @@
 #ifndef RURAL_WAL_H
 #define RURAL_WAL_H
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
-#include <stdbool.h>
+#include "hash.h"
 
 typedef struct {
-    FILE* file;
-} Wal;
+    FILE* fp;
+    char filename[256];
+} WAL;
 
-// Inicia o abre el log de operaciones
-Wal* wal_init(const char* filepath);
+typedef WAL Wal;
 
-// Registra la acción "PUT" en disco antes de que explote la máquina
-bool wal_append_put(Wal* wal, const char* key, const char* value);
-bool wal_append_del(Wal* wal, const char* key);
-bool wal_append_expire(Wal* wal, const char* key, int seconds);
-
-// Cierra el archivo de forma segura
-void wal_close(Wal* wal);
+WAL* wal_init(const char* filepath);
+bool wal_append_put(WAL* wal, const char* key, const char* value);
+bool wal_append_del(WAL* wal, const char* key);
+bool wal_append_expire(WAL* wal, const char* key, int seconds);
+void wal_replay(WAL* wal, HashTable* ht);
+void wal_close(WAL* wal);
 
 #endif

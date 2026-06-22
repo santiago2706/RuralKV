@@ -1,4 +1,5 @@
 #include "server.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,7 +56,7 @@ static void url_decode(char* dst, const char* src) {
  * @param wal Pointer to the write-ahead logging synchronization handle.
  */
 
-static void handle_client(SOCKET client_socket, HashTable* db, Wal* wal) {
+static void handle_client(SOCKET client_socket, HashTable* db, WAL* wal) {
     char buffer[1024] = {0};
     int bytes_read = recv(client_socket, buffer, sizeof(buffer)-1, 0);
     
@@ -250,7 +251,7 @@ static void handle_client(SOCKET client_socket, HashTable* db, Wal* wal) {
 }
 
 
-void server_start(int port, HashTable* db, Wal* wal){
+void server_start(int port, HashTable* db, WAL* wal){
 #ifdef _WIN32
     WSADATA wsaData;
     // Iniciar el subsistema de redes de Windows
