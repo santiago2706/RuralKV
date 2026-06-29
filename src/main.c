@@ -23,12 +23,16 @@ int main() {
     
     printf("[Paso 3] Abriendo Write-Ahead Log de Seguridad...\n");
     Wal* wal = wal_init("ruralkv.log");
+
+    printf("[Paso 4] Reaplicando operaciones del WAL...\n");
+    wal_replay(db, "ruralkv.log");
     
     // Aquí el programa bloquea el main thread y entra en un bucle infinito
     server_start(PORT, db, wal);
 
     // Estas lineas solo se alcanzarán si cerramos el servidor
     wal_close(wal);
+    hash_destroy(db);
     arena_free(arena);
     return 0;
 }

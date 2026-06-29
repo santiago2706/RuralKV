@@ -44,6 +44,39 @@ bool wal_append_expire(Wal* wal, const char* key, int seconds) {
     return true;
 }
 
+void wal_replay(HashTable* db, const char* filepath) {
+    FILE* file = fopen(filepath, "r");
+    if (!file) return; // Si no existe, no hay nada que recuperar
+    
+    char line[1024];
+    while (fgets(line, sizeof(line), file)) {
+        // Quitar saltos de línea (\r y \n)
+        line[strcspn(line, "\r\n")] = '\0';
+        
+        if (strncmp(line, "PUT ", 4) == 0) {
+            char* key = line + 4;
+            char* sep = strstr(key, " | ");
+            if (sep) {
+                *sep = '\0';
+                char* value = sep + 3;
+                hash_put(db, key, value);
+            }
+        } else if (strncmp(line, "DEL ", 4) == 0) {
+            char* key = line + 4;
+            hash_delete(db, key);
+        } else if (strncmp(line, "EXPIRE ", 7) == 0) {
+            char* key = line + 7;
+            char* space = strchr(key, ' ');
+            if (space) {
+                *space = '\0';
+                int seconds = atoi(space + 1);
+                hash_set_expire(db, key, seconds);
+            }
+        }
+    }
+    fclose(file);
+}
+
 void wal_close(Wal* wal) {
     if (wal) {
         if (wal->file) {

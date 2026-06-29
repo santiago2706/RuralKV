@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import sys
 import os
 import urllib.request
@@ -28,6 +29,7 @@ def print_help():
     print("  TTL <llave>           – muestra segundos restantes")
     print("  PING                  – prueba la conexión")
     print("  INFO                  – muestra información del servidor")
+    print("  SNAP                  – ejecuta snapshot y compactación de memoria (Arena GC)")
     print("  CLEAR                 – limpia la pantalla")
     print("  HELP                  – muestra esta ayuda")
     print("  EXIT                  – salir del cliente")
@@ -192,6 +194,11 @@ while True:
 
         elif verbo == "INFO":
             url = f"{URL_BASE}/info"
+            with urllib.request.urlopen(url) as response:
+                print(response.read().decode('utf-8'))
+
+        elif verbo == "SNAP" or verbo == "COMPACT":
+            url = f"{URL_BASE}/snapshot"
             with urllib.request.urlopen(url) as response:
                 print(response.read().decode('utf-8'))
 

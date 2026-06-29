@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "hash.h"
 
 typedef struct {
     FILE* file;
@@ -16,6 +17,9 @@ Wal* wal_init(const char* filepath);
 bool wal_append_put(Wal* wal, const char* key, const char* value);
 bool wal_append_del(Wal* wal, const char* key);
 bool wal_append_expire(Wal* wal, const char* key, int seconds);
+
+// Lee el archivo WAL y recupera el estado de la base de datos
+void wal_replay(HashTable* db, const char* filepath);
 
 // Cierra el archivo de forma segura
 void wal_close(Wal* wal);

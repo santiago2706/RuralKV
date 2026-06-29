@@ -198,6 +198,46 @@ static void handle_client(SOCKET client_socket, HashTable* db, Wal* wal) {
                 }
                 send(client_socket, response, strlen(response), 0);
             }
+        } else if (strncmp(url, "/snapshot", 9) == 0 || strncmp(url, "/compact", 8) == 0) {
+            printf("[Server] Iniciando Snapshot de base de datos y compactación de WAL...\n");
+            
+            // 1. Reconstruir/compactar la arena en memoria (Garbage Collection)
+            double old_offset = (double)db->arena->offset;
+            hash_rebuild_arena(db);
+            double new_offset = (double)db->arena->offset;
+            printf("[Arena GC] Compactado de %.0f bytes a %.0f bytes.\n", old_offset, new_offset);
+            
+            // 2. Compactar y reescribir el WAL a disco
+            if (wal && wal->file) {
+                fclose(wal->file);
+                FILE* tmp = fopen("ruralkv.log.tmp", "w");
+                if (tmp) {
+                    int count = 0;
+                    for (size_t i = 0; i < db->size; i++) {
+                        HashEntry* entry = db->buckets[i];
+                        while (entry != NULL) {
+                            if (entry->expire_at == 0 || time(NULL) < entry->expire_at) {
+                                fprintf(tmp, "PUT %s | %s\n", entry->key, entry->value);
+                                if (entry->expire_at != 0) {
+                                    int seconds_left = (int)(entry->expire_at - time(NULL));
+                                    if (seconds_left > 0) {
+                                        fprintf(tmp, "EXPIRE %s %d\n", entry->key, seconds_left);
+                                    }
+                                }
+                                count++;
+                            }
+                            entry = entry->next;
+                        }
+                    }
+                    fclose(tmp);
+                    rename("ruralkv.log.tmp", "ruralkv.log");
+                    printf("[WAL Snapshot] WAL compactado y reescrito con %d entradas activas.\n", count);
+                }
+                wal->file = fopen("ruralkv.log", "ab+");
+            }
+            
+            sprintf(response, "%s{\"estado\":\"exito\",\"mensaje\":\"Snapshot completado\",\"arena_reduccion_bytes\":%.0f}", HTTP_200, old_offset - new_offset);
+            send(client_socket, response, strlen(response), 0);
         } else if (strncmp(url, "/ping", 5) == 0) {
             sprintf(response, "%s{\"pong\":\"PONG\"}", HTTP_200);
             send(client_socket, response, strlen(response), 0);
@@ -238,6 +278,14 @@ void server_start(int port, HashTable* db, Wal* wal) {
         printf("Error Critico: Fallo del Socket Base.\n");
         return;
     }
+
+    // Permitir reutilización de dirección/puerto inmediatamente
+    int opt = 1;
+    #ifdef _WIN32
+        setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+    #else
+        setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    #endif
 
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;

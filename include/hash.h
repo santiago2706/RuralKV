@@ -22,6 +22,8 @@ typedef struct {
 } HashTable;
 
 HashTable* hash_create(Arena* arena, size_t size);
+void hash_destroy(HashTable* ht);
+void hash_rebuild_arena(HashTable* ht);
 bool hash_put(HashTable* ht, const char* key, const char* value);
 const char* hash_get(HashTable* ht, const char* key);
 bool hash_delete(HashTable* ht, const char* key);

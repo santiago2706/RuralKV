@@ -1,6 +1,8 @@
 #include "hash.h"
 #include <string.h>
 #include <time.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 // Algoritmo DJB2 (Creado por Dan Bernstein)
 // Convierte una palabra en un número entero único muy rápido usando shift << 5
@@ -14,6 +16,7 @@ static unsigned long hash_djb2(const char *str) {
 }
 
 static bool hash_entry_is_expired(HashEntry* entry) {
+    //tiene una fecha de expiracion designada  && la fecha actual es mayor o igual a esa fecha
     return entry->expire_at != 0 && time(NULL) >= entry->expire_at;
 }
 
@@ -28,23 +31,113 @@ static char* arena_strdup(Arena* a, const char* str) {
 }
 
 HashTable* hash_create(Arena* arena, size_t size) {
-    // Pedimos el espacio de la Arena
-    HashTable* ht = (HashTable*)arena_alloc(arena, sizeof(HashTable));
+    // Pedimos el espacio con malloc para que la estructura HashTable sea estable en memoria
+    HashTable* ht = (HashTable*)malloc(sizeof(HashTable));
     if (!ht) return NULL;
     
     ht->size = size;
     ht->arena = arena;
     
     size_t buckets_size = sizeof(HashEntry*) * size;
+    // Los buckets sí los asignamos en la arena
     ht->buckets = (HashEntry**)arena_alloc(arena, buckets_size);
-    if (!ht->buckets) return NULL;
+    if (!ht->buckets) {
+        free(ht);
+        return NULL;
+    }
     
     // Setea todo a nulo.
     memset(ht->buckets, 0, buckets_size);
     return ht;
 }
 
+void hash_destroy(HashTable* ht) {
+    if (ht) {
+        free(ht);
+    }
+}
+
+void hash_rebuild_arena(HashTable* ht) {
+    if (!ht || !ht->arena) return;
+
+    // 1. Crear una nueva arena temporal con la misma capacidad
+    Arena* new_arena = arena_init(ht->arena->capacity);
+    if (!new_arena) {
+        fprintf(stderr, "Error: No se pudo inicializar la nueva Arena para GC.\n");
+        return;
+    }
+
+    // 2. Asignar nuevos buckets en la nueva arena
+    size_t buckets_size = sizeof(HashEntry*) * ht->size;
+    HashEntry** new_buckets = (HashEntry**)arena_alloc(new_arena, buckets_size);
+    if (!new_buckets) {
+        fprintf(stderr, "Error: No se pudo asignar memoria para los nuevos buckets en GC.\n");
+        arena_free(new_arena);
+        return;
+    }
+    memset(new_buckets, 0, buckets_size);
+
+    // 3. Copiar las entradas activas a los nuevos buckets en la nueva arena
+    for (size_t i = 0; i < ht->size; i++) {
+        HashEntry* old_entry = ht->buckets[i];
+        while (old_entry != NULL) {
+            // Ignorar si está expirada
+            if (old_entry->expire_at != 0 && time(NULL) >= old_entry->expire_at) {
+                old_entry = old_entry->next;
+                continue;
+            }
+
+            // Crear nuevo nodo en la nueva arena
+            HashEntry* new_entry = (HashEntry*)arena_alloc(new_arena, sizeof(HashEntry));
+            if (!new_entry) {
+                fprintf(stderr, "Error: OOM durante reconstrucción de la Arena en GC.\n");
+                arena_free(new_arena);
+                return;
+            }
+
+            // Duplicar clave y valor en la nueva arena
+            size_t key_len = strlen(old_entry->key) + 1;
+            new_entry->key = (char*)arena_alloc(new_arena, key_len);
+            if (new_entry->key) {
+                memcpy(new_entry->key, old_entry->key, key_len);
+            }
+
+            size_t val_len = strlen(old_entry->value) + 1;
+            new_entry->value = (char*)arena_alloc(new_arena, val_len);
+            if (new_entry->value) {
+                memcpy(new_entry->value, old_entry->value, val_len);
+            }
+
+            new_entry->expire_at = old_entry->expire_at;
+
+            // Insertar al inicio de la lista del bucket correspondiente en la nueva tabla
+            unsigned long idx = hash_djb2(old_entry->key) % ht->size;
+            new_entry->next = new_buckets[idx];
+            new_buckets[idx] = new_entry;
+
+            old_entry = old_entry->next;
+        }
+    }
+
+    // 4. Liberar la arena vieja física y actualizar punteros en el HashTable
+    Arena* old_arena = ht->arena;
+    ht->buckets = new_buckets;
+    ht->arena = new_arena;
+    arena_free(old_arena);
+}
+
 bool hash_put(HashTable* ht, const char* key, const char* value) {
+    if (!ht || !ht->arena) return false;
+
+    // Si la arena está al 80% de su capacidad, compactamos (Garbage Collection)
+    if (ht->arena->offset > ht->arena->capacity * 0.8) {
+        printf("[Arena GC] Iniciando recolección de basura (Uso: %.1f%%)...\n", 
+               ((double)ht->arena->offset / ht->arena->capacity) * 100.0);
+        hash_rebuild_arena(ht);
+        printf("[Arena GC] Compactación completada (Nuevo Uso: %.1f%%).\n", 
+               ((double)ht->arena->offset / ht->arena->capacity) * 100.0);
+    }
+
     unsigned long idx = hash_djb2(key) % ht->size;
     
     // Revisar si ya existe
