@@ -3,7 +3,9 @@
  * @brief Chained HashTable implementation with lazy Time-To-Live (TTL) eviction.
  */
 #include "hash.h"
+#include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <time.h>
 
 /**
@@ -47,6 +49,8 @@ HashTable* hash_create(Arena* arena, size_t size) {
     if (!ht) return NULL;
     
     ht->size = size;
+    ht->count = 0;
+    ht->buckets_mallocd = 0;
     ht->arena = arena;
     
     size_t buckets_size = sizeof(HashEntry*) * size;
@@ -59,6 +63,11 @@ HashTable* hash_create(Arena* arena, size_t size) {
 }
 
 bool hash_put(HashTable* ht, const char* key, const char* value) {
+    // Trigger automático: rehash si load_factor > 2
+    if (ht->count > ht->size * 2) {
+        hash_resize(ht);
+    }
+
     unsigned long idx = hash_djb2(key) % ht->size;
     
     // Revisar si ya existe
@@ -84,7 +93,60 @@ bool hash_put(HashTable* ht, const char* key, const char* value) {
     // Encadenamiento al principio del bucket
     new_entry->next = ht->buckets[idx];
     ht->buckets[idx] = new_entry;
-    
+    ht->count++;
+
+    return true;
+}
+
+/**
+ * @brief Resizes the hash table when load_factor > 2 (count / size > 2).
+ * @details Allocates a new bucket array via malloc (double the current size),
+ * rehashes all active non-expired entries into it, then swaps and frees the old array.
+ * Node structs themselves stay in the Arena; only the bucket array is malloc'd.
+ */
+bool hash_resize(HashTable* ht) {
+    size_t new_size = ht->size * 2;
+    fprintf(stderr, "[RuralKV] Rehashing: load_factor superó 2 (%zu claves / %zu buckets). Expandiendo a %zu buckets...\n",
+            ht->count, ht->size, new_size);
+
+    // Usamos malloc para el nuevo arreglo de buckets (la Arena no puede liberar bloques individuales)
+    HashEntry** new_buckets = (HashEntry**)malloc(sizeof(HashEntry*) * new_size);
+    if (!new_buckets) {
+        fprintf(stderr, "[RuralKV] ERROR: No se pudo reservar memoria para el rehash.\n");
+        return false;
+    }
+    memset(new_buckets, 0, sizeof(HashEntry*) * new_size);
+
+    time_t now = time(NULL);
+    size_t new_count = 0;
+
+    // Reinsertar todas las entradas activas (no expiradas) en la nueva tabla
+    for (size_t i = 0; i < ht->size; i++) {
+        HashEntry* entry = ht->buckets[i];
+        while (entry != NULL) {
+            HashEntry* next = entry->next;
+            // Descartar entradas expiradas durante el rehash
+            if (entry->expire_at == 0 || now < entry->expire_at) {
+                unsigned long new_idx = hash_djb2(entry->key) % new_size;
+                entry->next = new_buckets[new_idx];
+                new_buckets[new_idx] = entry;
+                new_count++;
+            }
+            entry = next;
+        }
+    }
+
+    // Solo liberar el array viejo si fue asignado con malloc (no si viene de la Arena)
+    if (ht->buckets_mallocd) {
+        free(ht->buckets);
+    }
+
+    ht->buckets = new_buckets;
+    ht->size = new_size;
+    ht->count = new_count;
+    ht->buckets_mallocd = 1; // A partir de aquí siempre será malloc
+
+    fprintf(stderr, "[RuralKV] Rehash completo. Nuevos buckets: %zu, Claves activas: %zu\n", new_size, new_count);
     return true;
 }
 bool hash_delete(HashTable* ht, const char* key) {
@@ -99,6 +161,7 @@ bool hash_delete(HashTable* ht, const char* key) {
             } else {
                 ht->buckets[idx] = entry->next;
             }
+            ht->count--;
             return true;
         }
         prev = entry;

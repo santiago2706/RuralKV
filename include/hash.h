@@ -21,9 +21,11 @@ typedef struct HashEntry {
 
 // La estructura madre
 typedef struct {
-    HashEntry** buckets; // Arreglo de punteros de las casillas
-    size_t size;         // Cuántas casillas tenemos
-    Arena* arena;        // Referencia a nuestro dios salvador de la memoria
+    HashEntry** buckets;   // Arreglo de punteros de las casillas
+    size_t size;           // Cuántas casillas tenemos
+    size_t count;          // Cuántas claves activas hay (para calcular load factor)
+    int buckets_mallocd;   // 1 si buckets fue asignado con malloc (resize), 0 si viene de la Arena
+    Arena* arena;          // Referencia a nuestro dios salvador de la memoria
 } HashTable;
 /**
  * @brief Creates a new HashTable instance backed by an Arena allocator.
@@ -41,6 +43,14 @@ HashTable* hash_create(Arena* arena, size_t size);
  * @return true if insertion/update succeeded, false otherwise.
  */
 bool hash_put(HashTable* ht, const char* key, const char* value);
+/**
+ * @brief Resizes the hash table when load_factor > 2 (count / size > 2).
+ * @details Allocates a new bucket array (double the size) via malloc, rehashes
+ * all active (non-expired) entries, then frees the old bucket array.
+ * @param ht Pointer to the hash table to resize.
+ * @return true if resize succeeded, false on allocation failure.
+ */
+bool hash_resize(HashTable* ht);
 /**
  * @brief Retrieves a value associated with a given key.
  * @param ht Pointer to the hash table.
